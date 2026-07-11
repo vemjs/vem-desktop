@@ -1,0 +1,41 @@
+{
+  "name": "vem-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "test": "bun test src",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "oxlint ."
+  },
+  "dependencies": {
+    "@vectojs/core": "^1.5.0",
+    "@vectojs/ui": "^1.7.1",
+    "@vectojs/devtools": "^0.4.0",
+    "@vemjs/core": "^0.1.13",
+    "@vemjs/plugin-api": "^0.1.4",
+    "@vemjs/plugin-autopairs": "^0.1.1",
+    "@vemjs/plugin-git": "^0.1.2",
+    "@vemjs/plugin-layout-customizer": "^0.1.1",
+    "@vemjs/plugin-lualine": "^0.1.2",
+    "@vemjs/plugin-telescope": "^0.1.1",
+    "@vemjs/plugin-treesitter": "^0.1.1",
+    "@vemjs/plugin-trim-whitespace": "^0.1.1",
+    "@vemjs/renderer-vecto": "^0.1.14",
+    "@tauri-apps/api": "^2.9.0",
+    "@tauri-apps/plugin-dialog": "^2.4.0",
+    "@tauri-apps/plugin-fs": "^2.4.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.9.1",
+    "oxlint": "^1.72.0",
+    "prettier": "^3.9.4",
+    "typescript": "~6.0.2",
+    "vite": "^8.1.1"
+  }
+}
