@@ -1,9 +1,9 @@
 ---
 name: Bug report
 about: Create a report to help us improve vem-desktop
-title: 'bug: '
-labels: 'bug'
-assignees: ''
+title: "bug: "
+labels: "bug"
+assignees: ""
 ---
 
 **Describe the bug**
