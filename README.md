@@ -121,12 +121,15 @@ JSON-serializable — use a `.js`/`.mjs` vemrc (`-u path/to/vemrc.js`) for that.
   or CLI file arguments for the reliably-native path.
 - Windows release builds run with `windows_subsystem = "windows"` (no console window), so
   `--version`/`--help` output isn't visible unless you keep a debug build or attach a console.
-- **Linux/Wayland**: WebKitGTK's DMA-BUF renderer crashes on startup ("Gdk-Message: Error 71
-  (Protocol error) dispatching to Wayland display") on many compositor/GPU driver combinations —
-  an upstream WebKitGTK issue, not specific to vem. vem sets `WEBKIT_DISABLE_DMABUF_RENDERER=1`
-  itself before startup unless you've already set it, so this shouldn't surface in practice; if it
-  still does, set `WEBKIT_DISABLE_COMPOSITING_MODE=1` or run under XWayland (`GDK_BACKEND=x11
-vem`) as a fallback.
+- **Linux/Wayland + NVIDIA**: WebKitGTK's DMA-BUF renderer can crash on startup ("Gdk-Message:
+  Error 71 (Protocol error) dispatching to Wayland display") — an upstream WebKitGTK/NVIDIA
+  explicit-sync issue, not specific to vem (see
+  [Tauri's Linux graphics guide](https://v2.tauri.app/develop/debug/linux-graphics/)). When vem
+  detects an NVIDIA driver (`/proc/driver/nvidia`), it sets `__NV_DISABLE_EXPLICIT_SYNC=1` and
+  `WEBKIT_DISABLE_DMABUF_RENDERER=1` itself before startup, unless you've already set either — on
+  AMD/Intel this workaround is skipped entirely so you keep the faster rendering path. If it still
+  crashes, check `nvidia_drm.modeset=1` is set as a kernel parameter (older NVIDIA drivers), or set
+  `WEBKIT_DISABLE_COMPOSITING_MODE=1` as a last resort.
 
 ## Development
 

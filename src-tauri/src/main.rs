@@ -3,15 +3,25 @@
 // a real console isn't attached. Not solved here; see README.)
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-// WebKitGTK's DMA-BUF renderer (default since 2.42) crashes on startup with
 // "Gdk-Message: Error 71 (Protocol error) dispatching to Wayland display" on
-// a wide range of Wayland compositor/GPU driver combinations — a widely
-// reported upstream WebKitGTK issue, not specific to vem. Force the older,
-// universally-stable renderer unless the user has already set an override.
-// Must run before Tauri/GTK/WebKit initialize, so it's the first thing
-// main() does.
+// startup is, per Tauri's own Linux graphics debugging guide
+// (https://v2.tauri.app/develop/debug/linux-graphics/), overwhelmingly an
+// NVIDIA-driver problem: WebKitGTK's DMA-BUF renderer requests explicit-sync
+// buffer formats the driver doesn't provide. Gate the workarounds on NVIDIA
+// actually being present, per Tauri's own advice, so AMD/Intel users keep
+// the faster accelerated rendering path. Must run before Tauri/GTK/WebKit
+// initialize, so it's the first thing main() does.
 #[cfg(target_os = "linux")]
 fn apply_webkit_wayland_workaround() {
+    if !std::path::Path::new("/proc/driver/nvidia").exists() {
+        return;
+    }
+    // No performance cost per Tauri's docs — try this first.
+    if std::env::var_os("__NV_DISABLE_EXPLICIT_SYNC").is_none() {
+        std::env::set_var("__NV_DISABLE_EXPLICIT_SYNC", "1");
+    }
+    // Costs the faster DMA-BUF rendering path, but is the documented fallback
+    // when explicit-sync disabling alone isn't enough.
     if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
         std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
     }
