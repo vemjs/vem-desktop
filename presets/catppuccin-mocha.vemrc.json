@@ -1,0 +1,17 @@
+{
+  "theme": {
+    "bg": "#1e1e2e",
+    "fg": "#cdd6f4",
+    "sidebarBg": "#181825",
+    "gutterBg": "#1e1e2e",
+    "gutterFg": "#6c7086",
+    "statusBarBg": "#313244",
+    "statusBarFg": "#cdd6f4",
+    "accent": "#89b4fa",
+    "nonText": "#585b70"
+  },
+  "layout": {
+    "lineNumbers": "relative"
+  },
+  "clipboard": "unnamed"
+}

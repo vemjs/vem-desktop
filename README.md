@@ -42,6 +42,26 @@ argument support.
   `:quit`/`:exit` are accepted because they're what people instinctively type, on top of Vim's own
   `:q`/`:q!`/`:wq`/`:x`.
 
+## Configuration presets
+
+`presets/` has ready-made `vemrc.json` files — copy one to
+`$XDG_CONFIG_HOME/vem/vemrc.json` (the default vemrc location), or point `-u` at it directly:
+
+```sh
+vem -u presets/hybrid-numbers.vemrc.json notes.md
+```
+
+| Preset                        | What it sets                                                                                                                       |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `vim-classic.vemrc.json`      | Vem's actual defaults, spelled out explicitly: `nonumber`, internal register only.                                                 |
+| `hybrid-numbers.vemrc.json`   | Vim's popular `number`+`relativenumber` combo, and `:set clipboard=unnamed` so `y`/`d`/`p` share the OS clipboard with other apps. |
+| `catppuccin-mocha.vemrc.json` | A full [Catppuccin Mocha](https://catppuccin.com) theme on top of the hybrid-numbers settings.                                     |
+
+A vemrc is just a `VemConfig` object (see `@vemjs/core`'s `ConfigLoader`) — `theme`, `layout`,
+`clipboard`, and `keybindings` are all plain JSON-serializable fields, so these presets (or your
+own) are a starting point, not a fixed menu. `plugins` needs real imports and isn't
+JSON-serializable — use a `.js`/`.mjs` vemrc (`-u path/to/vemrc.js`) for that.
+
 ## Known limitations
 
 - `WorkspaceExplorer`'s built-in "Open Folder"/"Open File" buttons still use the browser File
