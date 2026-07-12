@@ -56,10 +56,14 @@ struct StartupArgs {
 fn parse_startup_args(argv: &[String]) -> StartupArgs {
     let mut out = StartupArgs::default();
     let mut i = 0;
+    let mut end_of_options = false;
     while i < argv.len() {
         let arg = argv[i].as_str();
         match arg {
+            _ if end_of_options => out.files.push(arg.to_string()),
+            "--" => end_of_options = true,
             "-R" => out.readonly = true,
+            "-n" => {} // no swap file — vem never creates one, so this is already the default
             "--clean" => out.clean = true,
             "-c" => {
                 i += 1;
@@ -73,8 +77,16 @@ fn parse_startup_args(argv: &[String]) -> StartupArgs {
                     out.vimrc_override = Some(path.clone());
                 }
             }
-            _ if arg.starts_with('+') && arg[1..].chars().all(|c| c.is_ascii_digit()) => {
+            _ if arg.len() > 1
+                && arg.starts_with('+')
+                && arg[1..].chars().all(|c| c.is_ascii_digit()) =>
+            {
                 out.line = arg[1..].parse().ok();
+            }
+            // `+{cmd}`: any non-numeric ex command run after the first file loads,
+            // e.g. `+set nu` or `+/pattern` — same execution point as `-c`.
+            _ if arg.len() > 1 && arg.starts_with('+') => {
+                out.ex_commands.push(arg[1..].to_string());
             }
             _ if !arg.starts_with('-') => out.files.push(arg.to_string()),
             _ => {} // unrecognized flag: ignored, not silently mapped to real behavior
@@ -160,5 +172,26 @@ mod tests {
     fn unrecognized_flags_are_ignored_not_faked() {
         let out = parse_startup_args(&args(&["-d", "a.txt", "b.txt"]));
         assert_eq!(out.files, vec!["a.txt", "b.txt"]);
+    }
+
+    #[test]
+    fn parses_plus_command_form_alongside_plus_line_jump() {
+        let out = parse_startup_args(&args(&["+set nu", "+42", "notes.md"]));
+        assert_eq!(out.ex_commands, vec!["set nu"]);
+        assert_eq!(out.line, Some(42));
+        assert_eq!(out.files, vec!["notes.md"]);
+    }
+
+    #[test]
+    fn parses_no_swapfile_flag_as_a_real_noop() {
+        let out = parse_startup_args(&args(&["-n", "a.txt"]));
+        assert_eq!(out.files, vec!["a.txt"]);
+    }
+
+    #[test]
+    fn end_of_options_marker_allows_dash_prefixed_filenames() {
+        let out = parse_startup_args(&args(&["--", "-weird-name.txt", "-R"]));
+        assert_eq!(out.files, vec!["-weird-name.txt", "-R"]);
+        assert!(!out.readonly);
     }
 }

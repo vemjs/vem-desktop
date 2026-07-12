@@ -69,11 +69,17 @@ them).
   --version           Print version and exit
   -h, --help          Print this help and exit
   +<lnum>             Place the cursor on line <lnum> of the first file
+  +<cmd>              Run ex command <cmd> after the first file loads
   -c <cmd>            Run an ex command after the first file loads (repeatable)
   -R                  Open read-only
+  -n                  No swap file (vem never creates one — accepted for
+                      script/muscle-memory compatibility, changes nothing)
   -u <path>           Use <path> instead of the default vemrc
   --clean             Skip loading the global vemrc
+  --                  End of options; remaining arguments are file names
   ```
+
+  Multiple file arguments open multiple buffers: `vem a.md b.md`.
 
   Everything else in `vim --help` (`-d` diff mode, `-b` binary, `-A`/`-H` Arabic/Hebrew,
   `--remote-*`, `-S` session, `-w`/`-W` script recording, …) has no vem equivalent yet and is
@@ -115,6 +121,12 @@ JSON-serializable — use a `.js`/`.mjs` vemrc (`-u path/to/vemrc.js`) for that.
   or CLI file arguments for the reliably-native path.
 - Windows release builds run with `windows_subsystem = "windows"` (no console window), so
   `--version`/`--help` output isn't visible unless you keep a debug build or attach a console.
+- **Linux/Wayland**: WebKitGTK's DMA-BUF renderer crashes on startup ("Gdk-Message: Error 71
+  (Protocol error) dispatching to Wayland display") on many compositor/GPU driver combinations —
+  an upstream WebKitGTK issue, not specific to vem. vem sets `WEBKIT_DISABLE_DMABUF_RENDERER=1`
+  itself before startup unless you've already set it, so this shouldn't surface in practice; if it
+  still does, set `WEBKIT_DISABLE_COMPOSITING_MODE=1` or run under XWayland (`GDK_BACKEND=x11
+vem`) as a fallback.
 
 ## Development
 

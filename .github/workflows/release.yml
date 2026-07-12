@@ -208,9 +208,9 @@ jobs:
           VERSION="${TAG#v}"
           for i in $(seq 1 10); do
             ARM_URL=$(gh release view "$TAG" --repo "${{ github.repository }}" --json assets \
-              --jq '.assets[] | select(.name | test("aarch64\\.dmg$")) | .browser_download_url')
+              --jq '.assets[] | select(.name | test("aarch64\\.dmg$")) | .url')
             X64_URL=$(gh release view "$TAG" --repo "${{ github.repository }}" --json assets \
-              --jq '.assets[] | select(.name | test("x64\\.dmg$")) | .browser_download_url')
+              --jq '.assets[] | select(.name | test("x64\\.dmg$")) | .url')
             [ -n "$ARM_URL" ] && [ -n "$X64_URL" ] && break
             echo "Assets not visible yet, retrying in 5s ($i/10)..."
             sleep 5
@@ -294,7 +294,7 @@ jobs:
           VERSION="${TAG#v}"
           for i in $(seq 1 10); do
             MSI_URL=$(gh release view "$TAG" --repo "${{ github.repository }}" --json assets \
-              --jq '.assets[] | select(.name | test("_x64_en-US\\.msi$")) | .browser_download_url')
+              --jq '.assets[] | select(.name | test("_x64_en-US\\.msi$")) | .url')
             [ -n "$MSI_URL" ] && break
             echo "Assets not visible yet, retrying in 5s ($i/10)..."
             sleep 5
