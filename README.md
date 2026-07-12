@@ -36,6 +36,11 @@ argument support.
 - **`-R` readonly**: vem's core has no per-keystroke write-protection yet. `-R` gives Vim's real
   guarantee — it won't silently overwrite your file — by refusing `:w` with `E45` instead of
   blocking every edit.
+- **Silent launch**: a release build attaches no log plugin and opens no devtools — running `vem`
+  from a terminal prints nothing. (A debug build via `cargo tauri dev` still logs, on purpose.)
+- **Friendlier quit commands**: `:q`, `:quit`, and `:exit` all quit (real Vim only has `:q`) —
+  `:quit`/`:exit` are accepted because they're what people instinctively type, on top of Vim's own
+  `:q`/`:q!`/`:wq`/`:x`.
 
 ## Known limitations
 
@@ -50,11 +55,17 @@ argument support.
 ```sh
 bun install
 cargo tauri dev      # live-reloading native window
-cargo tauri build    # production bundle
+just install         # release build, installed as ~/.local/bin/vem
 ```
 
 Requires the Rust toolchain and Tauri's platform prerequisites — see the
 [Tauri prerequisites guide](https://v2.tauri.app/start/prerequisites/).
+
+`just install` builds a release bundle (`just build`, i.e. `bun run tauri build`) and copies the
+resulting binary to `~/.local/bin/vem` — the crate's `[[bin]]` target is explicitly named `vem`
+(Cargo would otherwise default to the package name, `vem-desktop`), so after installing, `vem` on
+its own just works from any terminal. See `just verify` for the full local quality-gate run (Bun +
+Rust tests, clippy, fmt, lint, format checks) mirroring CI.
 
 ## Related repositories
 

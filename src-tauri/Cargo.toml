@@ -14,6 +14,14 @@ rust-version = "1.77.2"
 name = "app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+# Named explicitly so `cargo build --release` (and `tauri build`) produce a
+# binary literally called `vem`, not `vem-desktop` (Cargo's default when no
+# [[bin]] is declared is the package name) — the whole point is `vem` works
+# bare from a terminal.
+[[bin]]
+name = "vem"
+path = "src/main.rs"
+
 [build-dependencies]
 tauri-build = { version = "2.6.3", features = [] }
 
