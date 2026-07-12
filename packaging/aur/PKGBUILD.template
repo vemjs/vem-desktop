@@ -1,23 +1,33 @@
 # Maintainer: Xuepoo
-# This file is a template: CI (.github/workflows/release.yml, publish-aur job)
-# substitutes @PKGVER@ / @DEB_URL@ and writes the result to PKGBUILD before
-# running updpkgsums + makepkg --printsrcinfo. Don't hand-edit a generated
-# PKGBUILD in the AUR checkout; edit this template and cut a new release.
-pkgname=vem
+# This file is a shared template for both `vem` and `vem-bin` (identical
+# binary-repackage approach — there's no separate from-source build yet, so
+# `vem-bin` exists purely for AUR naming-convention discoverability).
+# CI (.github/workflows/release.yml, publish-aur job) substitutes
+# @PKGNAME@ / @PKGVER@ / @DEB_URL_X86_64@ / @DEB_URL_AARCH64@ and writes the
+# result to PKGBUILD before running updpkgsums + makepkg --printsrcinfo.
+# Don't hand-edit a generated PKGBUILD in the AUR checkout; edit this
+# template and cut a new release.
+pkgname=@PKGNAME@
 pkgver=@PKGVER@
 pkgrel=1
 pkgdesc="A next-generation Vim editor powered by VectoJS, running natively via Tauri"
-arch=('x86_64')
+arch=('x86_64' 'aarch64')
 url="https://vem.run"
 license=('MIT')
 depends=('webkit2gtk-4.1' 'gtk3' 'libayatana-appindicator' 'librsvg')
 provides=('vem')
-conflicts=('vem')
+conflicts=('vem' 'vem-bin')
 options=('!strip')
-source=("vem-${pkgver}.deb::@DEB_URL@")
-sha256sums=('SKIP')
+source_x86_64=("vem-${pkgver}-x86_64.deb::@DEB_URL_X86_64@")
+source_aarch64=("vem-${pkgver}-aarch64.deb::@DEB_URL_AARCH64@")
+sha256sums_x86_64=('SKIP')
+sha256sums_aarch64=('SKIP')
 
 package() {
-  bsdtar -xf "${srcdir}/vem-${pkgver}.deb" -C "${srcdir}"
+  case "$CARCH" in
+    x86_64) _debfile="vem-${pkgver}-x86_64.deb" ;;
+    aarch64) _debfile="vem-${pkgver}-aarch64.deb" ;;
+  esac
+  bsdtar -xf "${srcdir}/${_debfile}" -C "${srcdir}"
   bsdtar -xf "${srcdir}"/data.tar.* -C "${pkgdir}"
 }

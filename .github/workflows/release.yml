@@ -3,9 +3,29 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to (re)publish AUR/Homebrew/Scoop for, without rebuilding"
+        required: true
 
 jobs:
+  resolve-tag:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          fi
+
   release:
+    if: github.event_name == 'push'
+    needs: resolve-tag
     permissions:
       contents: write
     strategy:
@@ -17,6 +37,8 @@ jobs:
           - platform: "macos-latest"
             target: "x86_64-apple-darwin"
           - platform: "ubuntu-22.04"
+            target: ""
+          - platform: "ubuntu-22.04-arm"
             target: ""
           - platform: "windows-latest"
             target: ""
@@ -33,7 +55,7 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04'
+        if: startsWith(matrix.platform, 'ubuntu-22.04')
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
@@ -50,8 +72,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "Vem ${{ github.ref_name }}"
+          tagName: ${{ needs.resolve-tag.outputs.tag }}
+          releaseName: "Vem ${{ needs.resolve-tag.outputs.tag }}"
           releaseBody: "See CHANGELOG.md for details."
           releaseDraft: true
           prerelease: false
@@ -63,11 +85,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tar -czf vem-dist.tar.gz -C dist .
-          gh release upload "${{ github.ref_name }}" vem-dist.tar.gz --repo "${{ github.repository }}" --clobber
+          gh release upload "${{ needs.resolve-tag.outputs.tag }}" vem-dist.tar.gz --repo "${{ github.repository }}" --clobber
 
   publish-release:
     name: Publish GitHub release
-    needs: release
+    if: github.event_name == 'push'
+    needs: [resolve-tag, release]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -75,14 +98,18 @@ jobs:
       - name: Undraft the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release edit "${{ github.ref_name }}" --repo "${{ github.repository }}" --draft=false
+        run: gh release edit "${{ needs.resolve-tag.outputs.tag }}" --repo "${{ github.repository }}" --draft=false
 
   publish-aur:
-    name: Publish to AUR (vem)
-    needs: publish-release
+    name: Publish to AUR (${{ matrix.pkgname }})
+    needs: [resolve-tag, publish-release]
+    if: always() && needs.resolve-tag.result == 'success' && (needs.publish-release.result == 'success' || needs.publish-release.result == 'skipped')
     runs-on: ubuntu-latest
     container:
       image: archlinux:latest
+    strategy:
+      matrix:
+        pkgname: ["vem", "vem-bin"]
     steps:
       - uses: actions/checkout@v4
 
@@ -95,22 +122,32 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${{ github.ref_name }}"
+          TAG="${{ needs.resolve-tag.outputs.tag }}"
           VERSION="${TAG#v}"
-          DEB_URL=$(gh release view "$TAG" --repo "${{ github.repository }}" --json assets \
-            --jq '.assets[] | select(.name | test("_amd64\\.deb$")) | .url')
-          if [ -z "$DEB_URL" ]; then
-            echo "No amd64 .deb asset found on release $TAG" >&2
+          for i in $(seq 1 10); do
+            DEB_URL_X86_64=$(gh release view "$TAG" --repo "${{ github.repository }}" --json assets \
+              --jq '.assets[] | select(.name | test("_amd64\\.deb$")) | .url')
+            DEB_URL_AARCH64=$(gh release view "$TAG" --repo "${{ github.repository }}" --json assets \
+              --jq '.assets[] | select(.name | test("_arm64\\.deb$")) | .url')
+            [ -n "$DEB_URL_X86_64" ] && [ -n "$DEB_URL_AARCH64" ] && break
+            echo "Assets not visible yet, retrying in 5s ($i/10)..."
+            sleep 5
+          done
+          if [ -z "$DEB_URL_X86_64" ] || [ -z "$DEB_URL_AARCH64" ]; then
+            echo "Could not resolve both amd64 and arm64 .deb assets on release $TAG" >&2
             exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "deb_url=$DEB_URL" >> "$GITHUB_OUTPUT"
+          echo "deb_url_x86_64=$DEB_URL_X86_64" >> "$GITHUB_OUTPUT"
+          echo "deb_url_aarch64=$DEB_URL_AARCH64" >> "$GITHUB_OUTPUT"
 
       - name: Render PKGBUILD
         run: |
           sed \
+            -e "s|@PKGNAME@|${{ matrix.pkgname }}|g" \
             -e "s|@PKGVER@|${{ steps.asset.outputs.version }}|g" \
-            -e "s|@DEB_URL@|${{ steps.asset.outputs.deb_url }}|g" \
+            -e "s|@DEB_URL_X86_64@|${{ steps.asset.outputs.deb_url_x86_64 }}|g" \
+            -e "s|@DEB_URL_AARCH64@|${{ steps.asset.outputs.deb_url_aarch64 }}|g" \
             packaging/aur/PKGBUILD.template > packaging/aur/PKGBUILD
 
       - name: Create unprivileged build user
@@ -127,33 +164,37 @@ jobs:
           chown -R builder:builder /home/builder/.ssh
 
       - name: Update .SRCINFO, commit and push
+        env:
+          PKGNAME: ${{ matrix.pkgname }}
+          VERSION: ${{ steps.asset.outputs.version }}
         run: |
-          su builder -c '
+          su --whitelist-environment=PKGNAME,VERSION builder -c '
             set -e
             export GIT_SSH_COMMAND="ssh -i /home/builder/.ssh/aur -o UserKnownHostsFile=/home/builder/.ssh/known_hosts"
             git config --global user.name "vemjs-release-bot"
             git config --global user.email "release-bot@vem.run"
 
-            git clone ssh://aur@aur.archlinux.org/vem.git /tmp/aur-vem || (mkdir -p /tmp/aur-vem && cd /tmp/aur-vem && git init -b master)
-            cp packaging/aur/PKGBUILD /tmp/aur-vem/PKGBUILD
-            cd /tmp/aur-vem
+            git clone "ssh://aur@aur.archlinux.org/${PKGNAME}.git" /tmp/aur-pkg || (mkdir -p /tmp/aur-pkg && cd /tmp/aur-pkg && git init -b master)
+            cp packaging/aur/PKGBUILD /tmp/aur-pkg/PKGBUILD
+            cd /tmp/aur-pkg
 
             updpkgsums
             makepkg --printsrcinfo > .SRCINFO
 
-            git remote add origin ssh://aur@aur.archlinux.org/vem.git 2>/dev/null || true
+            git remote add origin "ssh://aur@aur.archlinux.org/${PKGNAME}.git" 2>/dev/null || true
             git add PKGBUILD .SRCINFO
             if git diff --cached --quiet; then
               echo "No AUR changes for this release"
               exit 0
             fi
-            git commit -m "Update to ${{ steps.asset.outputs.version }}"
+            git commit -m "Update to ${VERSION}"
             git push origin HEAD:master
           '
 
   sync-homebrew:
     name: Sync Homebrew cask (Xuepoo/homebrew-tap)
-    needs: publish-release
+    needs: [resolve-tag, publish-release]
+    if: always() && needs.resolve-tag.result == 'success' && (needs.publish-release.result == 'success' || needs.publish-release.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -163,12 +204,17 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${{ github.ref_name }}"
+          TAG="${{ needs.resolve-tag.outputs.tag }}"
           VERSION="${TAG#v}"
-          ARM_URL=$(gh release view "$TAG" --repo "${{ github.repository }}" --json assets \
-            --jq '.assets[] | select(.name | test("aarch64\\.dmg$")) | .browser_download_url')
-          X64_URL=$(gh release view "$TAG" --repo "${{ github.repository }}" --json assets \
-            --jq '.assets[] | select(.name | test("x64\\.dmg$")) | .browser_download_url')
+          for i in $(seq 1 10); do
+            ARM_URL=$(gh release view "$TAG" --repo "${{ github.repository }}" --json assets \
+              --jq '.assets[] | select(.name | test("aarch64\\.dmg$")) | .browser_download_url')
+            X64_URL=$(gh release view "$TAG" --repo "${{ github.repository }}" --json assets \
+              --jq '.assets[] | select(.name | test("x64\\.dmg$")) | .browser_download_url')
+            [ -n "$ARM_URL" ] && [ -n "$X64_URL" ] && break
+            echo "Assets not visible yet, retrying in 5s ($i/10)..."
+            sleep 5
+          done
           if [ -z "$ARM_URL" ] || [ -z "$X64_URL" ]; then
             echo "Could not resolve both macOS .dmg assets on release $TAG" >&2
             exit 1
@@ -233,7 +279,8 @@ jobs:
 
   sync-scoop:
     name: Sync Scoop manifest (Xuepoo/scoop-bucket)
-    needs: publish-release
+    needs: [resolve-tag, publish-release]
+    if: always() && needs.resolve-tag.result == 'success' && (needs.publish-release.result == 'success' || needs.publish-release.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -243,10 +290,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${{ github.ref_name }}"
+          TAG="${{ needs.resolve-tag.outputs.tag }}"
           VERSION="${TAG#v}"
-          MSI_URL=$(gh release view "$TAG" --repo "${{ github.repository }}" --json assets \
-            --jq '.assets[] | select(.name | test("_x64_en-US\\.msi$")) | .browser_download_url')
+          for i in $(seq 1 10); do
+            MSI_URL=$(gh release view "$TAG" --repo "${{ github.repository }}" --json assets \
+              --jq '.assets[] | select(.name | test("_x64_en-US\\.msi$")) | .browser_download_url')
+            [ -n "$MSI_URL" ] && break
+            echo "Assets not visible yet, retrying in 5s ($i/10)..."
+            sleep 5
+          done
           if [ -z "$MSI_URL" ]; then
             echo "Could not resolve the x64 .msi asset on release $TAG" >&2
             exit 1
