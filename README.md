@@ -4,6 +4,52 @@ Vem's [Tauri](https://tauri.app) desktop shell — the same canvas-native editor
 [vem.run](https://vem.run), running in a native window with real local config/cache and CLI
 argument support.
 
+## Installation
+
+Prebuilt for macOS, Linux, and Windows on every [release](https://github.com/vemjs/vem-desktop/releases).
+
+**Arch Linux (AUR)**
+
+```sh
+paru -S vem   # or: yay -S vem
+```
+
+**macOS (Homebrew)**
+
+```sh
+brew install --cask Xuepoo/tap/vem
+```
+
+**Windows (Scoop)**
+
+```powershell
+scoop bucket add xuepoo https://github.com/Xuepoo/scoop-bucket
+scoop install xuepoo/vem
+```
+
+**NixOS / Nix**
+
+```sh
+nix run github:vemjs/vem-desktop
+# or add `github:vemjs/vem-desktop` to your flake inputs and reference `packages.default`
+```
+
+`flake.nix` fetches the frontend build already published on the matching GitHub release rather than
+running `bun install` inside the Nix sandbox — after cutting a new release, update `distHash` in
+`flake.nix` with `nix store prefetch-file --hash-type sha256 <vem-dist.tar.gz release URL>`.
+
+**Manual**
+
+Download the `.deb`/`.AppImage` (Linux), `.dmg` (macOS), or `.msi` (Windows) from the
+[latest release](https://github.com/vemjs/vem-desktop/releases/latest) directly.
+
+All four channels are updated automatically by `.github/workflows/release.yml` on every `v*` tag
+push — AUR via `AUR_SSH_PRIVATE_KEY`, Homebrew/Scoop by pushing to
+[`Xuepoo/homebrew-tap`](https://github.com/Xuepoo/homebrew-tap) and
+[`Xuepoo/scoop-bucket`](https://github.com/Xuepoo/scoop-bucket) via a `GH_PAT` secret (needed
+because those repos live outside the `vemjs` org, so the default `GITHUB_TOKEN` can't push to
+them).
+
 ## What's different from the web build
 
 - **Local config**: on boot, loads `$XDG_CONFIG_HOME/vem/vemrc.json` (falls back to the platform

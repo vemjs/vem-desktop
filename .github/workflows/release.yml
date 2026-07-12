@@ -1,0 +1,323 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: "macos-latest"
+            target: "aarch64-apple-darwin"
+          - platform: "macos-latest"
+            target: "x86_64-apple-darwin"
+          - platform: "ubuntu-22.04"
+            target: ""
+          - platform: "windows-latest"
+            target: ""
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Rust build cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+
+      - name: Install dependencies
+        run: bun install
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Vem ${{ github.ref_name }}"
+          releaseBody: "See CHANGELOG.md for details."
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
+
+      - name: Upload frontend dist (for flake.nix)
+        if: matrix.platform == 'ubuntu-22.04'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tar -czf vem-dist.tar.gz -C dist .
+          gh release upload "${{ github.ref_name }}" vem-dist.tar.gz --repo "${{ github.repository }}" --clobber
+
+  publish-release:
+    name: Publish GitHub release
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Undraft the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${{ github.ref_name }}" --repo "${{ github.repository }}" --draft=false
+
+  publish-aur:
+    name: Publish to AUR (vem)
+    needs: publish-release
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install packaging tools
+        run: |
+          pacman -Syu --noconfirm --needed base-devel git openssh pacman-contrib github-cli
+
+      - name: Resolve release asset
+        id: asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+          DEB_URL=$(gh release view "$TAG" --repo "${{ github.repository }}" --json assets \
+            --jq '.assets[] | select(.name | test("_amd64\\.deb$")) | .url')
+          if [ -z "$DEB_URL" ]; then
+            echo "No amd64 .deb asset found on release $TAG" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "deb_url=$DEB_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Render PKGBUILD
+        run: |
+          sed \
+            -e "s|@PKGVER@|${{ steps.asset.outputs.version }}|g" \
+            -e "s|@DEB_URL@|${{ steps.asset.outputs.deb_url }}|g" \
+            packaging/aur/PKGBUILD.template > packaging/aur/PKGBUILD
+
+      - name: Create unprivileged build user
+        run: |
+          useradd -m builder
+          chown -R builder:builder .
+
+      - name: Set up SSH for AUR
+        run: |
+          mkdir -p /home/builder/.ssh
+          echo "${{ secrets.AUR_SSH_PRIVATE_KEY }}" > /home/builder/.ssh/aur
+          chmod 600 /home/builder/.ssh/aur
+          ssh-keyscan -H aur.archlinux.org >> /home/builder/.ssh/known_hosts
+          chown -R builder:builder /home/builder/.ssh
+
+      - name: Update .SRCINFO, commit and push
+        run: |
+          su builder -c '
+            set -e
+            export GIT_SSH_COMMAND="ssh -i /home/builder/.ssh/aur -o UserKnownHostsFile=/home/builder/.ssh/known_hosts"
+            git config --global user.name "vemjs-release-bot"
+            git config --global user.email "release-bot@vem.run"
+
+            git clone ssh://aur@aur.archlinux.org/vem.git /tmp/aur-vem || (mkdir -p /tmp/aur-vem && cd /tmp/aur-vem && git init -b master)
+            cp packaging/aur/PKGBUILD /tmp/aur-vem/PKGBUILD
+            cd /tmp/aur-vem
+
+            updpkgsums
+            makepkg --printsrcinfo > .SRCINFO
+
+            git remote add origin ssh://aur@aur.archlinux.org/vem.git 2>/dev/null || true
+            git add PKGBUILD .SRCINFO
+            if git diff --cached --quiet; then
+              echo "No AUR changes for this release"
+              exit 0
+            fi
+            git commit -m "Update to ${{ steps.asset.outputs.version }}"
+            git push origin HEAD:master
+          '
+
+  sync-homebrew:
+    name: Sync Homebrew cask (Xuepoo/homebrew-tap)
+    needs: publish-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve release assets
+        id: asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+          ARM_URL=$(gh release view "$TAG" --repo "${{ github.repository }}" --json assets \
+            --jq '.assets[] | select(.name | test("aarch64\\.dmg$")) | .browser_download_url')
+          X64_URL=$(gh release view "$TAG" --repo "${{ github.repository }}" --json assets \
+            --jq '.assets[] | select(.name | test("x64\\.dmg$")) | .browser_download_url')
+          if [ -z "$ARM_URL" ] || [ -z "$X64_URL" ]; then
+            echo "Could not resolve both macOS .dmg assets on release $TAG" >&2
+            exit 1
+          fi
+          curl -fsSL -o arm64.dmg "$ARM_URL"
+          curl -fsSL -o x64.dmg "$X64_URL"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "arm_url=$ARM_URL" >> "$GITHUB_OUTPUT"
+          echo "x64_url=$X64_URL" >> "$GITHUB_OUTPUT"
+          echo "arm_sha=$(sha256sum arm64.dmg | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "x64_sha=$(sha256sum x64.dmg | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Check out homebrew-tap
+        uses: actions/checkout@v4
+        with:
+          repository: Xuepoo/homebrew-tap
+          token: ${{ secrets.GH_PAT }}
+          path: homebrew-tap
+
+      - name: Write Cask
+        run: |
+          mkdir -p homebrew-tap/Casks
+          cat > homebrew-tap/Casks/vem.rb << EOF
+          cask "vem" do
+            version "${{ steps.asset.outputs.version }}"
+
+            on_arm do
+              sha256 "${{ steps.asset.outputs.arm_sha }}"
+              url "${{ steps.asset.outputs.arm_url }}"
+            end
+            on_intel do
+              sha256 "${{ steps.asset.outputs.x64_sha }}"
+              url "${{ steps.asset.outputs.x64_url }}"
+            end
+
+            name "Vem"
+            desc "A next-generation Vim editor powered by VectoJS, running natively via Tauri"
+            homepage "https://vem.run"
+
+            app "Vem.app"
+
+            zap trash: [
+              "~/Library/Application Support/run.vem.desktop",
+              "~/Library/WebKit/run.vem.desktop",
+              "~/Library/Saved Application State/run.vem.desktop.savedState",
+            ]
+          end
+          EOF
+
+      - name: Commit and push
+        run: |
+          cd homebrew-tap
+          git config user.name "vemjs-release-bot"
+          git config user.email "release-bot@vem.run"
+          git add Casks/vem.rb
+          if git diff --cached --quiet; then
+            echo "No Homebrew changes for this release"
+            exit 0
+          fi
+          git commit -m "vem: update to ${{ steps.asset.outputs.version }}"
+          git push origin HEAD:main
+
+  sync-scoop:
+    name: Sync Scoop manifest (Xuepoo/scoop-bucket)
+    needs: publish-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve release asset
+        id: asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+          MSI_URL=$(gh release view "$TAG" --repo "${{ github.repository }}" --json assets \
+            --jq '.assets[] | select(.name | test("_x64_en-US\\.msi$")) | .browser_download_url')
+          if [ -z "$MSI_URL" ]; then
+            echo "Could not resolve the x64 .msi asset on release $TAG" >&2
+            exit 1
+          fi
+          MSI_NAME=$(basename "$MSI_URL")
+          curl -fsSL -o "$MSI_NAME" "$MSI_URL"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "msi_url=$MSI_URL" >> "$GITHUB_OUTPUT"
+          echo "msi_name=$MSI_NAME" >> "$GITHUB_OUTPUT"
+          echo "msi_sha=$(sha256sum "$MSI_NAME" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Check out scoop-bucket
+        uses: actions/checkout@v4
+        with:
+          repository: Xuepoo/scoop-bucket
+          token: ${{ secrets.GH_PAT }}
+          path: scoop-bucket
+
+      - name: Write manifest
+        run: |
+          mkdir -p scoop-bucket/bucket
+          cat > scoop-bucket/bucket/vem.json << EOF
+          {
+            "version": "${{ steps.asset.outputs.version }}",
+            "description": "A next-generation Vim editor powered by VectoJS, running natively via Tauri",
+            "homepage": "https://vem.run",
+            "license": "MIT",
+            "architecture": {
+              "64bit": {
+                "url": "${{ steps.asset.outputs.msi_url }}",
+                "hash": "${{ steps.asset.outputs.msi_sha }}"
+              }
+            },
+            "installer": {
+              "script": [
+                "\$logFile = \"\$dir\\\\vem-install.log\"",
+                "\$argList = @('/i', \"\`\"\$dir\\\\${{ steps.asset.outputs.msi_name }}\`\"\", '/quiet', '/qn', '/norestart', \"/log \`\"\$logFile\`\"\", \"INSTALLDIR=\`\"\$dir\\\\Vem\`\"\")",
+                "\$Process = Start-Process 'msiexec.exe' -ArgumentList \$argList -Wait -PassThru",
+                "if (\$Process.ExitCode -ne 0) { Write-Output (Get-Content \$logFile); throw \"msiexec failed with exit code \$(\$Process.ExitCode)\" }"
+              ]
+            },
+            "uninstaller": {
+              "script": [
+                "\$argList = @('/x', \"\`\"\$dir\\\\${{ steps.asset.outputs.msi_name }}\`\"\", '/quiet', '/qn', '/norestart')",
+                "Start-Process 'msiexec.exe' -ArgumentList \$argList -Wait"
+              ]
+            },
+            "bin": "Vem\\\\vem.exe",
+            "shortcuts": [["Vem\\\\vem.exe", "Vem"]],
+            "checkver": {
+              "github": "https://github.com/vemjs/vem-desktop"
+            },
+            "autoupdate": {
+              "architecture": {
+                "64bit": {
+                  "url": "https://github.com/vemjs/vem-desktop/releases/download/v\$version/Vem_\$version_x64_en-US.msi"
+                }
+              }
+            }
+          }
+          EOF
+
+      - name: Commit and push
+        run: |
+          cd scoop-bucket
+          git config user.name "vemjs-release-bot"
+          git config user.email "release-bot@vem.run"
+          git add bucket/vem.json
+          if git diff --cached --quiet; then
+            echo "No Scoop changes for this release"
+            exit 0
+          fi
+          git commit -m "vem: update to ${{ steps.asset.outputs.version }}"
+          git push origin HEAD:main
