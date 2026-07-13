@@ -27,6 +27,68 @@ fn apply_webkit_wayland_workaround() {
     }
 }
 
+/// GUI editors launched from a shell detach from it (gvim, `code`, `subl`):
+/// the prompt returns immediately, and Ctrl+C in that terminal can no longer
+/// kill the editor — which is exactly what happened before this existed.
+/// The parent re-spawns itself into a new session (`setsid`) and exits;
+/// `-f`/`--foreground` keeps the attached behavior for `$EDITOR`-style
+/// callers that need to wait on the process. Windows release builds are a
+/// GUI-subsystem app (see the cfg_attr above) — the shell never waits on
+/// them, so there is nothing to detach from.
+#[cfg(unix)]
+fn detach_from_terminal(argv: &[String]) {
+    use std::io::IsTerminal;
+    use std::os::unix::process::CommandExt;
+    use std::process::{Command, Stdio};
+
+    // Already the detached child — run for real this time.
+    if std::env::var_os("VEM_DETACHED").is_some() {
+        return;
+    }
+    // Only arguments before `--` are options; after it, `-f` is a filename.
+    for arg in argv {
+        if arg == "--" {
+            break;
+        }
+        if arg == "-f" || arg == "--foreground" {
+            return;
+        }
+    }
+    // No terminal attached (launched from a .desktop entry / dock):
+    // nothing to detach from, and re-spawning would just waste a process.
+    if !std::io::stdin().is_terminal() && !std::io::stdout().is_terminal() {
+        return;
+    }
+
+    let exe = match std::env::current_exe() {
+        Ok(path) => path,
+        Err(_) => return, // can't locate ourselves — run attached rather than not at all
+    };
+    let mut cmd = Command::new(exe);
+    cmd.args(argv)
+        .env("VEM_DETACHED", "1")
+        // stderr stays on the terminal so driver/WebKit warnings remain
+        // visible at launch (the Wayland Error-71 report arrived that way).
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::inherit());
+    unsafe {
+        // A new session, not just a new process group: the child leaves the
+        // terminal's session entirely, so terminal-driven SIGINT/SIGHUP can
+        // never reach it.
+        cmd.pre_exec(|| {
+            if libc::setsid() == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    if cmd.spawn().is_ok() {
+        std::process::exit(0);
+    }
+    // Spawn failed: degrade to the old attached behavior.
+}
+
 fn main() {
     #[cfg(target_os = "linux")]
     apply_webkit_wayland_workaround();
@@ -54,6 +116,8 @@ fn main() {
                 "  +<cmd>              Run ex command <cmd> after the first file loads\n",
                 "  -c <cmd>            Run an ex command after the first file loads (repeatable)\n",
                 "  -R                  Open read-only\n",
+                "  -f, --foreground    Stay attached to the launching terminal instead of\n",
+                "                      detaching (for $EDITOR-style callers that wait on vem)\n",
                 "  -n                  No swap file (vem never creates one — accepted for\n",
                 "                      script/muscle-memory compatibility, changes nothing)\n",
                 "  -u <path>           Use <path> instead of the default vemrc\n",
@@ -65,5 +129,9 @@ fn main() {
         );
         return;
     }
+
+    #[cfg(unix)]
+    detach_from_terminal(&argv);
+
     app_lib::run();
 }

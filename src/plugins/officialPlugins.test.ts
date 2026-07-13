@@ -49,10 +49,10 @@ describe("official Playground plugins", () => {
     expect(highlighted[0]).toMatchObject({ text: "const", color: "#ff79c6" });
 
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(editor.gutterDecorations.get(0)).toMatchObject({
-      type: "add",
-      color: "#10b981",
-    });
+    // Regression: the git plugin used to paint fake green/blue/red gutter
+    // signs on every buffer in a browser-like environment (`window` defined),
+    // real diff or not — it should show nothing here instead of guessing.
+    expect(editor.gutterDecorations.size).toBe(0);
 
     editor.handleKey("Escape");
     registry.executeCommand("layout.toggleSidebar");

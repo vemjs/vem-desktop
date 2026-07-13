@@ -64,6 +64,9 @@ fn parse_startup_args(argv: &[String]) -> StartupArgs {
             "--" => end_of_options = true,
             "-R" => out.readonly = true,
             "-n" => {} // no swap file — vem never creates one, so this is already the default
+            // Consumed by main.rs before the Tauri runtime starts (stay
+            // attached to the terminal instead of detaching) — not a file.
+            "-f" | "--foreground" => {}
             "--clean" => out.clean = true,
             "-c" => {
                 i += 1;
@@ -186,6 +189,14 @@ mod tests {
     fn parses_no_swapfile_flag_as_a_real_noop() {
         let out = parse_startup_args(&args(&["-n", "a.txt"]));
         assert_eq!(out.files, vec!["a.txt"]);
+    }
+
+    #[test]
+    fn foreground_flag_is_consumed_not_treated_as_a_file() {
+        let out = parse_startup_args(&args(&["-f", "a.txt"]));
+        assert_eq!(out.files, vec!["a.txt"]);
+        let out = parse_startup_args(&args(&["--foreground", "b.txt"]));
+        assert_eq!(out.files, vec!["b.txt"]);
     }
 
     #[test]

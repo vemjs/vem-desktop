@@ -57,9 +57,12 @@ them).
   build.
 - **Local cache/data**: `$XDG_CACHE_HOME/vem` and `$XDG_DATA_HOME/vem` are created on first launch
   for future use (LSP indexes, plugin caches, …).
-- **Native file I/O**: `:e` and CLI file arguments read/write through Tauri's `dialog`/`fs`
-  plugins instead of the browser's File System Access API (which WebKitGTK doesn't reliably
-  support).
+- **Native file I/O**: `:e`, the sidebar Dir/File buttons, and CLI file arguments read/write
+  through Tauri's `dialog`/`fs` plugins instead of the browser's File System Access API (which
+  WebKitGTK doesn't reliably support).
+- **Terminal detach**: launched from a shell, `vem` returns the prompt immediately and detaches
+  into its own session (like `gvim`/`code`), so Ctrl+C in that terminal can't kill the editor.
+  `-f`/`--foreground` keeps it attached for `$EDITOR`-style callers that wait on the process.
 - **CLI flags** (a deliberately small, honest subset of `vim --help` — only flags wired to real
   vem behavior):
 
@@ -72,6 +75,8 @@ them).
   +<cmd>              Run ex command <cmd> after the first file loads
   -c <cmd>            Run an ex command after the first file loads (repeatable)
   -R                  Open read-only
+  -f, --foreground    Stay attached to the launching terminal instead of
+                      detaching (for $EDITOR-style callers that wait on vem)
   -n                  No swap file (vem never creates one — accepted for
                       script/muscle-memory compatibility, changes nothing)
   -u <path>           Use <path> instead of the default vemrc

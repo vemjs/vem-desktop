@@ -4,7 +4,10 @@ import {
   WorkspaceExplorer,
   CTRL_VIM_KEYS,
   PREVENT_CTRL_KEYS,
+  fileIcon,
+  type WorkspaceFsProvider,
 } from "@vemjs/renderer-vecto";
+import type { TreeNode } from "@vectojs/ui";
 import type { PluginRegistry } from "@vemjs/plugin-api";
 import { ConfigLoader, VemEditorState } from "@vemjs/core";
 import { PluginPanel } from "./plugins/PluginPanel";
@@ -16,6 +19,7 @@ import { HELP_TEXT, VEMRC_TEMPLATE } from "./help";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
+  readDir,
   readTextFile,
   writeTextFile,
   exists as fileExists,
@@ -125,11 +129,81 @@ async function main() {
       return null;
     }
     const label = path.split(/[/\\]/).pop() ?? path;
-    const bufferId = playgroundView.getWorkspace().openBuffer(text, label);
+    // openFileBuffer (not raw openBuffer): a still-untouched untitled tab is
+    // replaced in place, so `vem test.py` opens exactly one tab, like Vim.
+    const bufferId = playgroundView.openFileBuffer(text, label);
     const state = getActivePlaygroundState();
     if (state) wireSave(state, path);
     return bufferId;
   };
+
+  // --- Sidebar "Dir"/"File" buttons: WebKitGTK has no File System Access
+  // API (the renderer's default provider), so back them with Tauri's native
+  // dialog + fs plugins instead of leaving them silently dead.
+  const guardReadonlySave = async (path: string, content: string) => {
+    if (startupArgs.readonly) {
+      throw new Error("E45: 'readonly' option is set (add ! to override)");
+    }
+    await writeTextFile(path, content);
+  };
+
+  const buildDirNodes = async (dirPath: string): Promise<TreeNode[]> => {
+    const entries = await readDir(dirPath);
+    const nodes: TreeNode[] = entries.map((entry) => {
+      const full = `${dirPath}/${entry.name}`;
+      if (entry.isDirectory) {
+        return {
+          id: full,
+          label: entry.name,
+          icon: "📁",
+          iconColor: "#e2b64a",
+          children: async () => buildDirNodes(full),
+        } as unknown as TreeNode;
+      }
+      const fi = fileIcon(entry.name);
+      return {
+        id: full,
+        label: entry.name,
+        icon: fi.icon,
+        iconColor: fi.color,
+      };
+    });
+    // Directories first, then files, both alphabetical — matching the web
+    // provider's ordering so the tree feels identical across builds.
+    nodes.sort((a, b) => {
+      const aIsDir = a.icon === "📁";
+      const bIsDir = b.icon === "📁";
+      if (aIsDir && !bIsDir) return -1;
+      if (!aIsDir && bIsDir) return 1;
+      return a.label.localeCompare(b.label);
+    });
+    return nodes;
+  };
+
+  const tauriFsProvider: WorkspaceFsProvider = {
+    async pickDirectory() {
+      const dir = await openDialog({ directory: true, multiple: false });
+      if (typeof dir !== "string") return null;
+      return {
+        nodes: await buildDirNodes(dir),
+        readFile: (id: string) => readTextFile(id),
+        saveFile: (id: string, content: string) =>
+          guardReadonlySave(id, content),
+      };
+    },
+    async pickFile() {
+      const picked = await openDialog({ multiple: false, directory: false });
+      if (typeof picked !== "string") return null;
+      const content = await readTextFile(picked);
+      const name = picked.split(/[/\\]/).pop() ?? picked;
+      return {
+        name,
+        content,
+        save: (text: string) => guardReadonlySave(picked, text),
+      };
+    },
+  };
+  playgroundView.setFileSystemProvider(tauriFsProvider);
 
   // `:e` (no arg) opens the native picker; `:e <path>` opens it directly —
   // matching Vim's :edit, backed by real dialog + fs instead of the File
