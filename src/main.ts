@@ -308,6 +308,20 @@ async function main() {
   canvas.focus();
   canvas.addEventListener("click", () => canvas.focus());
 
+  // Vim mouse=a owns the right button (it extends/starts a selection); the
+  // native WebKitGTK menu popping over the editor is never wanted. Bind on
+  // window so the a11y projection overlay (which sits above the canvas and
+  // receives the raw event) is covered too. (Ported from vem-website.)
+  window.addEventListener("contextmenu", (e) => {
+    if (
+      e.target === canvas ||
+      (e.target instanceof HTMLElement &&
+        canvas.parentElement?.contains(e.target))
+    ) {
+      e.preventDefault();
+    }
+  });
+
   const engineOwnsKeys = (e: KeyboardEvent): boolean => {
     const t = e.target;
     return t instanceof HTMLElement && t !== canvas && t !== document.body;
