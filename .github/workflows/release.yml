@@ -105,6 +105,8 @@ jobs:
     needs: [resolve-tag, publish-release]
     if: always() && needs.resolve-tag.result == 'success' && (needs.publish-release.result == 'success' || needs.publish-release.result == 'skipped')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     container:
       image: archlinux:latest
     strategy:
@@ -115,7 +117,7 @@ jobs:
 
       - name: Install packaging tools
         run: |
-          pacman -Syu --noconfirm --needed base-devel git openssh pacman-contrib github-cli
+          pacman -Syu --noconfirm --needed base-devel git openssh pacman-contrib github-cli jq
 
       - name: Resolve release asset
         id: asset
@@ -141,11 +143,27 @@ jobs:
           echo "deb_url_x86_64=$DEB_URL_X86_64" >> "$GITHUB_OUTPUT"
           echo "deb_url_aarch64=$DEB_URL_AARCH64" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve pkgrel
+        id: pkgrel
+        run: |
+          # Same pkgver already on AUR (a metadata-only republish) → bump
+          # pkgrel so installed users are offered the update; new pkgver → 1.
+          CURRENT=$(curl -fsSL "https://aur.archlinux.org/rpc/v5/info?arg[]=${{ matrix.pkgname }}" \
+            | jq -r '.results[0].Version // empty')
+          if [ "${CURRENT%-*}" = "${{ steps.asset.outputs.version }}" ]; then
+            PKGREL=$(( ${CURRENT##*-} + 1 ))
+          else
+            PKGREL=1
+          fi
+          echo "Current AUR: '${CURRENT:-none}' -> pkgrel=$PKGREL"
+          echo "pkgrel=$PKGREL" >> "$GITHUB_OUTPUT"
+
       - name: Render PKGBUILD
         run: |
           sed \
             -e "s|@PKGNAME@|${{ matrix.pkgname }}|g" \
             -e "s|@PKGVER@|${{ steps.asset.outputs.version }}|g" \
+            -e "s|@PKGREL@|${{ steps.pkgrel.outputs.pkgrel }}|g" \
             -e "s|@DEB_URL_X86_64@|${{ steps.asset.outputs.deb_url_x86_64 }}|g" \
             -e "s|@DEB_URL_AARCH64@|${{ steps.asset.outputs.deb_url_aarch64 }}|g" \
             packaging/aur/PKGBUILD.template > packaging/aur/PKGBUILD
@@ -163,12 +181,13 @@ jobs:
           ssh-keyscan -H aur.archlinux.org >> /home/builder/.ssh/known_hosts
           chown -R builder:builder /home/builder/.ssh
 
-      - name: Update .SRCINFO, commit and push
+      - name: Build packages, update .SRCINFO, commit and push
         env:
           PKGNAME: ${{ matrix.pkgname }}
           VERSION: ${{ steps.asset.outputs.version }}
+          PKGREL: ${{ steps.pkgrel.outputs.pkgrel }}
         run: |
-          su --whitelist-environment=PKGNAME,VERSION builder -c '
+          su --whitelist-environment=PKGNAME,VERSION,PKGREL builder -c '
             set -e
             export GIT_SSH_COMMAND="ssh -i /home/builder/.ssh/aur -o UserKnownHostsFile=/home/builder/.ssh/known_hosts"
             git config --global user.name "vemjs-release-bot"
@@ -181,15 +200,32 @@ jobs:
             updpkgsums
             makepkg --printsrcinfo > .SRCINFO
 
+            # Build test gates the AUR push, and the resulting .pkg.tar.zst
+            # files are uploaded to the GitHub release for direct pacman -U
+            # installs. package() only extracts the $CARCH-matching .deb, so
+            # the aarch64 package can be produced on x86_64 via a CARCH
+            # override (no compilation happens).
+            makepkg -df --noconfirm
+            sed "s|^CARCH=.*|CARCH=\"aarch64\"|" /etc/makepkg.conf > /tmp/makepkg-aarch64.conf
+            MAKEPKG_CONF=/tmp/makepkg-aarch64.conf makepkg -df --noconfirm --ignorearch
+
             git remote add origin "ssh://aur@aur.archlinux.org/${PKGNAME}.git" 2>/dev/null || true
             git add PKGBUILD .SRCINFO
             if git diff --cached --quiet; then
               echo "No AUR changes for this release"
               exit 0
             fi
-            git commit -m "Update to ${VERSION}"
+            git commit -m "Update to ${VERSION}-${PKGREL:-1}"
             git push origin HEAD:master
           '
+
+      - name: Upload .pkg.tar.zst to the release
+        if: matrix.pkgname == 'vem-bin'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ needs.resolve-tag.outputs.tag }}" /tmp/aur-pkg/*.pkg.tar.zst \
+            --repo "${{ github.repository }}" --clobber
 
   sync-homebrew:
     name: Sync Homebrew cask (Xuepoo/homebrew-tap)
