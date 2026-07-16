@@ -11,7 +11,15 @@ Prebuilt for macOS, Linux, and Windows on every [release](https://github.com/vem
 **Arch Linux (AUR)**
 
 ```sh
-paru -S vem   # or: yay -S vem
+paru -S vem-bin   # or: yay -S vem-bin
+paru -Syu         # updates it like any other package
+```
+
+(`vem` is the same binary repackage under the plain name; the two conflict, pick one.)
+Prefer skipping the AUR round-trip? Each release also ships ready-made Arch packages:
+
+```sh
+pacman -U https://github.com/vemjs/vem-desktop/releases/latest/download/vem-bin-<version>-1-x86_64.pkg.tar.zst
 ```
 
 **macOS (Homebrew)**
