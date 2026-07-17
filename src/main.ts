@@ -61,7 +61,7 @@ async function main() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
 
-  const scene = new Scene(canvas);
+  const scene = new Scene(canvas, { a11ySyncInterval: 100, maxDPR: 2 });
 
   const playgroundRegistries = new WeakMap<VemEditorState, PluginRegistry>();
   // The real file list once a directory is open (WorkspaceExplorer fills the
