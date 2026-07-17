@@ -4,13 +4,19 @@ import { VemEditorState } from "@vemjs/core";
 import type { PluginRegistry } from "@vemjs/plugin-api";
 import { officialPlugins } from "./officialPlugins";
 
-const PANEL_BG = "#07110f";
-const PANEL_CARD = "#0d1b18";
-const PANEL_STROKE = "#1d3b35";
-const TEXT_MAIN = "#edf7f3";
-const TEXT_MUTED = "#8ba69d";
-const ACCENT = "#2dd4bf";
-const AMBER = "#f4b860";
+// Fallback colors for the brief window before an editor state (and its
+// theme) exists — matches @vemjs/core's DEFAULT_THEME so there's no flash of
+// mismatched color before the first render() picks up the live theme.
+const FALLBACK_BG = "#000000";
+const FALLBACK_FG = "#d0d0d0";
+const FALLBACK_MUTED = "#767676";
+const FALLBACK_ACCENT = "#5f87d7";
+
+// Vim's own monospace stack (matches VemEditorEntity's editorFont) — Plugin
+// Lab is chrome around the editor, not a separate web-app-styled surface, so
+// it reads as part of the same Vim-flavored UI rather than a bolted-on panel.
+const PANEL_FONT =
+  '"JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, Monaco, monospace';
 
 export class PluginPanel extends UIComponent {
   private titleText: Text;
@@ -35,26 +41,26 @@ export class PluginPanel extends UIComponent {
     this.getRegistry = getRegistry;
 
     this.titleText = new Text("Plugin Lab", {
-      font: "700 20px Outfit, sans-serif",
-      color: TEXT_MAIN,
-    }).setPosition(24, 24);
+      font: `600 15px ${PANEL_FONT}`,
+      color: FALLBACK_FG,
+    }).setPosition(20, 24);
 
     this.subtitleText = new Text(
       "Official extensions are loaded into this playground.",
       {
-        font: "13px Outfit, sans-serif",
-        color: TEXT_MUTED,
-        maxWidth: width - 48,
-        lineHeight: 18,
+        font: `12px ${PANEL_FONT}`,
+        color: FALLBACK_MUTED,
+        maxWidth: width - 40,
+        lineHeight: 16,
       },
-    ).setPosition(24, 54);
+    ).setPosition(20, 50);
 
     this.statusText = new Text("Click a plugin to run a live smoke test.", {
-      font: "12px JetBrains Mono, monospace",
-      color: AMBER,
-      maxWidth: width - 48,
-      lineHeight: 17,
-    }).setPosition(24, height - 54);
+      font: `12px ${PANEL_FONT}`,
+      color: FALLBACK_ACCENT,
+      maxWidth: width - 40,
+      lineHeight: 16,
+    }).setPosition(20, height - 46);
 
     this.add(this.titleText);
     this.add(this.subtitleText);
@@ -63,15 +69,15 @@ export class PluginPanel extends UIComponent {
     officialPlugins.forEach((definition, index) => {
       const button = new Button("Run", {
         onClick: () => this.runDemo(definition.id),
-        bg: "rgba(45, 212, 191, 0.12)",
-        hoverBg: "rgba(45, 212, 191, 0.24)",
-        color: ACCENT,
-        font: "700 12px Outfit, sans-serif",
-        radius: 999,
+        bg: "transparent",
+        hoverBg: "rgba(255, 255, 255, 0.08)",
+        color: FALLBACK_ACCENT,
+        font: `12px ${PANEL_FONT}`,
+        radius: 2,
       });
-      button.width = 64;
-      button.height = 28;
-      button.setPosition(width - 88, 108 + index * 64);
+      button.width = 52;
+      button.height = 24;
+      button.setPosition(width - 72, 96 + index * 60);
       this.demoButtons.push(button);
       this.add(button);
     });
@@ -86,12 +92,12 @@ export class PluginPanel extends UIComponent {
       const localX = event.localX;
       const localY = event.localY;
       if (localX === undefined || localY === undefined) return;
-      if (localX < 18 || localX > this.width - 18) return;
+      if (localX < 16 || localX > this.width - 16) return;
 
-      const index = Math.floor((localY - 94) / 64);
-      const rowY = 94 + index * 64;
+      const index = Math.floor((localY - 82) / 60);
+      const rowY = 82 + index * 60;
       const definition = officialPlugins[index];
-      if (!definition || localY < rowY || localY > rowY + 52) return;
+      if (!definition || localY < rowY || localY > rowY + 48) return;
 
       this.runDemo(definition.id);
     };
@@ -103,12 +109,12 @@ export class PluginPanel extends UIComponent {
   public resize(width: number, height: number): void {
     this.width = width;
     this.height = height;
-    const textWidth = Math.max(120, width - 48);
+    const textWidth = Math.max(120, width - 40);
     this.subtitleText.setMaxWidth(textWidth);
     this.statusText.setMaxWidth(textWidth);
-    this.statusText.setPosition(24, height - 54);
+    this.statusText.setPosition(20, height - 46);
     this.demoButtons.forEach((button, index) => {
-      button.setPosition(width - 88, 108 + index * 64);
+      button.setPosition(width - 72, 96 + index * 60);
     });
   }
 
@@ -196,51 +202,65 @@ export class PluginPanel extends UIComponent {
   }
 
   public render(r: IRenderer): void {
+    // Pull live theme colors so Plugin Lab follows the user's own theme
+    // (e.g. a Catppuccin vemrc) instead of a fixed teal/emerald palette baked
+    // in separately from the rest of the app.
+    const theme = this.getEditorState()?.theme;
+    const bg = theme?.sidebarBg ?? FALLBACK_BG;
+    const fg = theme?.fg ?? FALLBACK_FG;
+    const muted = theme?.gutterFg ?? FALLBACK_MUTED;
+    const accent = theme?.accent ?? FALLBACK_ACCENT;
+    const stroke = fg + "1a";
+
+    this.titleText.color = fg;
+    this.subtitleText.color = muted;
+    this.statusText.color = accent;
+    for (const button of this.demoButtons) {
+      button.color = accent;
+    }
+
     r.beginPath();
     r.moveTo(0, 0);
     r.lineTo(this.width, 0);
     r.lineTo(this.width, this.height);
     r.lineTo(0, this.height);
     r.closePath();
-    r.fill(PANEL_BG);
+    r.fill(bg);
 
     r.beginPath();
     r.moveTo(0, 0);
     r.lineTo(0, this.height);
     r.closePath();
-    r.stroke(PANEL_STROKE, 1.5);
+    r.stroke(stroke, 1);
 
     for (let i = 0; i < officialPlugins.length; i++) {
       const definition = officialPlugins[i];
-      const y = 94 + i * 64;
+      const y = 82 + i * 60;
 
+      // A thin bottom rule between rows, not a card — sharp corners, no
+      // fill, matching Vim's flat list style (e.g. :ls, netrw) rather than
+      // a web-app card grid.
       r.beginPath();
-      r.roundRect(18, y, this.width - 36, 52, 12);
+      r.moveTo(16, y + 48);
+      r.lineTo(this.width - 16, y + 48);
       r.closePath();
-      r.fill(PANEL_CARD);
-      r.stroke("rgba(45, 212, 191, 0.14)", 1);
+      r.stroke(stroke, 1);
 
-      const textWidth = this.width - 150;
-      r.fillText(
-        definition.label,
-        32,
-        y + 21,
-        "700 13px Outfit, sans-serif",
-        TEXT_MAIN,
-      );
+      const textWidth = this.width - 130;
+      r.fillText(definition.label, 16, y + 18, `600 12px ${PANEL_FONT}`, fg);
       r.fillText(
         this.clipText(definition.summary, textWidth),
-        32,
-        y + 39,
-        "11px Outfit, sans-serif",
-        TEXT_MUTED,
+        16,
+        y + 34,
+        `11px ${PANEL_FONT}`,
+        muted,
       );
     }
 
     r.beginPath();
-    r.roundRect(18, this.height - 72, this.width - 36, 48, 12);
+    r.moveTo(16, this.height - 60);
+    r.lineTo(this.width - 16, this.height - 60);
     r.closePath();
-    r.fill("rgba(244, 184, 96, 0.08)");
-    r.stroke("rgba(244, 184, 96, 0.22)", 1);
+    r.stroke(stroke, 1);
   }
 }

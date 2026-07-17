@@ -1,5 +1,9 @@
 import type { VemEditorState } from "@vemjs/core";
-import { PluginRegistry, type VemPlugin } from "@vemjs/plugin-api";
+import {
+  PluginRegistry,
+  type PluginHostCapabilities,
+  type VemPlugin,
+} from "@vemjs/plugin-api";
 import { AutopairsPlugin } from "@vemjs/plugin-autopairs";
 import { GitPlugin } from "@vemjs/plugin-git";
 import { LayoutCustomizerPlugin } from "@vemjs/plugin-layout-customizer";
@@ -91,8 +95,9 @@ export function activatePluginById(
 
 export function createOfficialPluginRegistry(
   editorState: VemEditorState,
+  capabilities: PluginHostCapabilities = {},
 ): PluginRegistry {
-  const registry = new PluginRegistry(editorState);
+  const registry = new PluginRegistry(editorState, capabilities);
   registerOfficialPlugins(registry);
   return registry;
 }

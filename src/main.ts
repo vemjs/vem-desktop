@@ -17,6 +17,7 @@ import {
 } from "./plugins/officialPlugins";
 import { HELP_TEXT, VEMRC_TEMPLATE } from "./help";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   readDir,
@@ -62,30 +63,62 @@ async function main() {
 
   const scene = new Scene(canvas);
 
+  const playgroundRegistries = new WeakMap<VemEditorState, PluginRegistry>();
+  // The real file list once a directory is open (WorkspaceExplorer fills the
+  // active state on open; this snapshot covers states created afterwards).
+  let workspaceProjectFiles: string[] | null = null;
+  const seedProjectFiles = (state: VemEditorState) => {
+    if (state.projectFiles.length > 0) return;
+    state.projectFiles = workspaceProjectFiles ?? [];
+  };
+
+  const ensureRegistry = (state: VemEditorState): PluginRegistry => {
+    seedProjectFiles(state);
+    let registry = playgroundRegistries.get(state);
+    if (!registry) {
+      registry = createOfficialPluginRegistry(state, {
+        // Telescope's find-files: really open the file (native fs read).
+        openFile: async (path: string) => {
+          await openFile(path);
+          scene.markDirty();
+        },
+        // Git signs: `git diff -U0` via the Rust backend — a rejection
+        // (no repo, untracked, git missing) is caught by the plugin and
+        // rendered as "no signs".
+        gitDiff: (fileUri: string) =>
+          invoke<string>("git_diff_unified", { path: fileUri }),
+      });
+      playgroundRegistries.set(state, registry);
+    }
+    return registry;
+  };
+
+  // Every state — the boot buffer, each `:vsp`/`:sp` pane, CLI-opened files,
+  // Plugin Lab's scratch — gets its plugins at construction. Before this
+  // hook, only the buffer active at boot had a registry, so new panes
+  // silently lost autopairs, trim-on-save, git signs, and telescope
+  // (2026-07-16 audit, bug 1).
+  VemEditorState.onDidCreateState((state) => {
+    ensureRegistry(state);
+  });
+
   const playgroundView = new WorkspaceExplorer(
     window.innerWidth,
     window.innerHeight,
     "",
   );
 
-  const playgroundRegistries = new WeakMap<VemEditorState, PluginRegistry>();
-  const seedProjectFiles = (state: VemEditorState) => {
-    if (state.projectFiles.length > 0) return;
-    state.projectFiles = [];
-  };
+  // Vim parity: `:q` on the last tab quits the application (the web build
+  // keeps the splash instead — a browser tab can't exit itself).
+  playgroundView.getWorkspace().onLastTabClose(() => {
+    void getCurrentWindow().close();
+  });
+
   const getActivePlaygroundState = () =>
     playgroundView.getActiveEditorState() as VemEditorState | null;
   const getPlaygroundRegistry = () => {
     const activeState = getActivePlaygroundState();
-    if (!activeState) return null;
-    seedProjectFiles(activeState);
-
-    let registry = playgroundRegistries.get(activeState);
-    if (!registry) {
-      registry = createOfficialPluginRegistry(activeState);
-      playgroundRegistries.set(activeState, registry);
-    }
-    return registry;
+    return activeState ? ensureRegistry(activeState) : null;
   };
   getPlaygroundRegistry();
 
@@ -204,6 +237,13 @@ async function main() {
     },
   };
   playgroundView.setFileSystemProvider(tauriFsProvider);
+
+  // WorkspaceExplorer fills the active state's projectFiles before firing
+  // this callback — snapshot the list for states created afterwards (new
+  // splits/tabs seed from it, so telescope's find-files works everywhere).
+  playgroundView.onDidOpenDirectory(() => {
+    workspaceProjectFiles = getActivePlaygroundState()?.projectFiles ?? null;
+  });
 
   // `:e` (no arg) opens the native picker; `:e <path>` opens it directly —
   // matching Vim's :edit, backed by real dialog + fs instead of the File

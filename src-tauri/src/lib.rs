@@ -50,6 +50,49 @@ struct StartupArgs {
     vimrc_override: Option<String>,
 }
 
+/// `git diff -U0 -- <file>` for the git-signs plugin, run from the file's
+/// own directory (the process cwd is almost never inside the repository the
+/// open file belongs to). Arguments are passed positionally — no shell is
+/// involved — and a missing repo/untracked file/absent git all surface as
+/// `Err`, which the JS side maps to "no signs", never fabricated ones.
+///
+/// `--no-ext-diff` and `-c diff.textconv=` are mandatory: without them, `git
+/// diff` on a file in an *attacker-controlled* repository (any cloned or
+/// extracted directory the user opens) will happily run a command declared
+/// in that repo's own `.git/config` (`diff.external`) or `.gitattributes`
+/// (`diff=<driver>` + `[diff "<driver>"] textconv=<cmd>`) — arbitrary code
+/// execution just from opening a file. Repo-local config can't override a
+/// `-c` flag passed on our own command line, so this is not bypassable by
+/// the same untrusted repo.
+#[tauri::command]
+fn git_diff_unified(path: String) -> Result<String, String> {
+    let file = std::path::Path::new(&path);
+    let dir = file
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .ok_or_else(|| format!("no parent directory for {path}"))?;
+    let output = std::process::Command::new("git")
+        .args([
+            "-c",
+            "diff.external=",
+            "-c",
+            "diff.textconv=",
+            "diff",
+            "--no-ext-diff",
+            "--no-textconv",
+            "-U0",
+            "--",
+        ])
+        .arg(file)
+        .current_dir(dir)
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).into_owned());
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
 // --version/-h/--help are handled in main.rs, before the Tauri runtime (and
 // any window) starts — they never reach here.
 
@@ -111,7 +154,11 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .invoke_handler(tauri::generate_handler![get_vem_dirs, get_startup_args])
+        .invoke_handler(tauri::generate_handler![
+            get_vem_dirs,
+            get_startup_args,
+            git_diff_unified
+        ])
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -204,5 +251,102 @@ mod tests {
         let out = parse_startup_args(&args(&["--", "-weird-name.txt", "-R"]));
         assert_eq!(out.files, vec!["-weird-name.txt", "-R"]);
         assert!(!out.readonly);
+    }
+}
+
+#[cfg(test)]
+mod git_diff_tests {
+    use super::git_diff_unified;
+    use std::process::Command;
+
+    fn git(dir: &std::path::Path, args: &[&str]) {
+        assert!(Command::new("git")
+            .args(args)
+            .current_dir(dir)
+            .output()
+            .expect("git runs")
+            .status
+            .success());
+    }
+
+    #[test]
+    fn reports_hunks_for_a_modified_tracked_file() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let file = dir.path().join("sample.txt");
+        git(dir.path(), &["init", "-q"]);
+        git(dir.path(), &["config", "user.email", "test@vem.run"]);
+        git(dir.path(), &["config", "user.name", "vem test"]);
+        std::fs::write(&file, "line1\nline2\nline3\n").unwrap();
+        git(dir.path(), &["add", "sample.txt"]);
+        git(dir.path(), &["commit", "-q", "-m", "initial"]);
+        std::fs::write(&file, "line1\nCHANGED\nline3\n").unwrap();
+
+        let diff = git_diff_unified(file.to_string_lossy().into_owned()).expect("diff ok");
+        assert!(diff.contains("@@ -2 +2 @@"), "hunk header present: {diff}");
+    }
+
+    #[test]
+    fn errors_outside_a_repository_instead_of_fabricating() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let file = dir.path().join("loose.txt");
+        std::fs::write(&file, "text\n").unwrap();
+        assert!(git_diff_unified(file.to_string_lossy().into_owned()).is_err());
+    }
+
+    /// Security regression: a repository the user merely *opened* (any clone
+    /// or extracted archive) must not be able to run arbitrary commands via
+    /// `diff.external` — this is exactly the RCE surface flagged in the
+    /// 2026-07-16 audit. The marker file proves whether the external command
+    /// ran; without `--no-ext-diff`/`-c diff.external=` it would.
+    #[test]
+    fn a_malicious_repo_diff_external_driver_never_executes() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let marker = dir.path().join("pwned");
+        let file = dir.path().join("sample.txt");
+        git(dir.path(), &["init", "-q"]);
+        git(dir.path(), &["config", "user.email", "test@vem.run"]);
+        git(dir.path(), &["config", "user.name", "vem test"]);
+        std::fs::write(&file, "line1\nline2\n").unwrap();
+        git(dir.path(), &["add", "sample.txt"]);
+        git(dir.path(), &["commit", "-q", "-m", "initial"]);
+
+        // A malicious repo controls its own .git/config entirely.
+        let touch_cmd = format!("touch {}", marker.to_string_lossy());
+        git(dir.path(), &["config", "diff.external", &touch_cmd]);
+
+        std::fs::write(&file, "line1\nCHANGED\n").unwrap();
+        let _ = git_diff_unified(file.to_string_lossy().into_owned());
+
+        assert!(
+            !marker.exists(),
+            "diff.external ran an arbitrary command from an opened repo's own config"
+        );
+    }
+
+    /// Same attack surface via `.gitattributes` + `[diff "<driver>"]
+    /// textconv=<cmd>`, which `--no-ext-diff` alone does not cover.
+    #[test]
+    fn a_malicious_repo_textconv_driver_never_executes() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let marker = dir.path().join("pwned");
+        let file = dir.path().join("sample.bin");
+        git(dir.path(), &["init", "-q"]);
+        git(dir.path(), &["config", "user.email", "test@vem.run"]);
+        git(dir.path(), &["config", "user.name", "vem test"]);
+        std::fs::write(dir.path().join(".gitattributes"), "*.bin diff=evil\n").unwrap();
+        std::fs::write(&file, b"line1\nline2\n").unwrap();
+        git(dir.path(), &["add", "."]);
+        git(dir.path(), &["commit", "-q", "-m", "initial"]);
+
+        let touch_cmd = format!("touch {}", marker.to_string_lossy());
+        git(dir.path(), &["config", "diff.evil.textconv", &touch_cmd]);
+
+        std::fs::write(&file, b"line1\nCHANGED\n").unwrap();
+        let _ = git_diff_unified(file.to_string_lossy().into_owned());
+
+        assert!(
+            !marker.exists(),
+            "diff.<driver>.textconv ran an arbitrary command from an opened repo's own config"
+        );
     }
 }

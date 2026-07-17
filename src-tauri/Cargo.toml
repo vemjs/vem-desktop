@@ -1,6 +1,6 @@
 [package]
 name = "vem-desktop"
-version = "0.1.5"
+version = "0.1.6"
 description = "Vem's Tauri desktop shell"
 authors = ["vemjs"]
 license = "MIT"
@@ -37,3 +37,6 @@ dirs = "6"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+[dev-dependencies]
+tempfile = "3.27.0"
