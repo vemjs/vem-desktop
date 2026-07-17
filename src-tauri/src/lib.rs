@@ -50,6 +50,30 @@ struct StartupArgs {
     vimrc_override: Option<String>,
 }
 
+/// `git diff -U0 -- <file>` for the git-signs plugin, run from the file's
+/// own directory (the process cwd is almost never inside the repository the
+/// open file belongs to). Arguments are passed positionally — no shell is
+/// involved — and a missing repo/untracked file/absent git all surface as
+/// `Err`, which the JS side maps to "no signs", never fabricated ones.
+#[tauri::command]
+fn git_diff_unified(path: String) -> Result<String, String> {
+    let file = std::path::Path::new(&path);
+    let dir = file
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .ok_or_else(|| format!("no parent directory for {path}"))?;
+    let output = std::process::Command::new("git")
+        .args(["diff", "-U0", "--"])
+        .arg(file)
+        .current_dir(dir)
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).into_owned());
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
 // --version/-h/--help are handled in main.rs, before the Tauri runtime (and
 // any window) starts — they never reach here.
 
@@ -111,7 +135,11 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .invoke_handler(tauri::generate_handler![get_vem_dirs, get_startup_args])
+        .invoke_handler(tauri::generate_handler![
+            get_vem_dirs,
+            get_startup_args,
+            git_diff_unified
+        ])
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -204,5 +232,45 @@ mod tests {
         let out = parse_startup_args(&args(&["--", "-weird-name.txt", "-R"]));
         assert_eq!(out.files, vec!["-weird-name.txt", "-R"]);
         assert!(!out.readonly);
+    }
+}
+
+#[cfg(test)]
+mod git_diff_tests {
+    use super::git_diff_unified;
+    use std::process::Command;
+
+    fn git(dir: &std::path::Path, args: &[&str]) {
+        assert!(Command::new("git")
+            .args(args)
+            .current_dir(dir)
+            .output()
+            .expect("git runs")
+            .status
+            .success());
+    }
+
+    #[test]
+    fn reports_hunks_for_a_modified_tracked_file() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let file = dir.path().join("sample.txt");
+        git(dir.path(), &["init", "-q"]);
+        git(dir.path(), &["config", "user.email", "test@vem.run"]);
+        git(dir.path(), &["config", "user.name", "vem test"]);
+        std::fs::write(&file, "line1\nline2\nline3\n").unwrap();
+        git(dir.path(), &["add", "sample.txt"]);
+        git(dir.path(), &["commit", "-q", "-m", "initial"]);
+        std::fs::write(&file, "line1\nCHANGED\nline3\n").unwrap();
+
+        let diff = git_diff_unified(file.to_string_lossy().into_owned()).expect("diff ok");
+        assert!(diff.contains("@@ -2 +2 @@"), "hunk header present: {diff}");
+    }
+
+    #[test]
+    fn errors_outside_a_repository_instead_of_fabricating() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let file = dir.path().join("loose.txt");
+        std::fs::write(&file, "text\n").unwrap();
+        assert!(git_diff_unified(file.to_string_lossy().into_owned()).is_err());
     }
 }

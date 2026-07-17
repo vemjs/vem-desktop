@@ -1,7 +1,7 @@
 {
   "name": "vem-desktop",
   "private": true,
-  "version": "0.1.5",
+  "version": "0.1.6",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -19,17 +19,17 @@
     "@tauri-apps/plugin-fs": "^2.4.0",
     "@vectojs/core": "^1.9.2",
     "@vectojs/devtools": "^0.4.2",
-    "@vectojs/ui": "^1.9.4",
-    "@vemjs/core": "^0.3.0",
-    "@vemjs/plugin-api": "^0.1.6",
+    "@vectojs/ui": "^1.9.5",
+    "@vemjs/core": "^0.3.1",
+    "@vemjs/plugin-api": "^0.1.7",
     "@vemjs/plugin-autopairs": "^0.1.2",
-    "@vemjs/plugin-git": "^0.1.3",
-    "@vemjs/plugin-layout-customizer": "^0.1.1",
-    "@vemjs/plugin-lualine": "^0.1.2",
-    "@vemjs/plugin-telescope": "^0.1.1",
+    "@vemjs/plugin-git": "^0.1.4",
+    "@vemjs/plugin-layout-customizer": "^0.1.2",
+    "@vemjs/plugin-lualine": "^0.1.3",
+    "@vemjs/plugin-telescope": "^0.1.2",
     "@vemjs/plugin-treesitter": "^0.1.1",
     "@vemjs/plugin-trim-whitespace": "^0.1.1",
-    "@vemjs/renderer-vecto": "^0.4.1"
+    "@vemjs/renderer-vecto": "^0.4.2"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.9.1",
