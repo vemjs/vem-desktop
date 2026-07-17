@@ -11,8 +11,8 @@
         "@vectojs/core": "^1.10.0",
         "@vectojs/devtools": "^0.4.2",
         "@vectojs/ui": "^1.9.5",
-        "@vemjs/core": "^0.3.1",
-        "@vemjs/plugin-api": "^0.1.7",
+        "@vemjs/core": "^0.5.0",
+        "@vemjs/plugin-api": "^0.1.9",
         "@vemjs/plugin-autopairs": "^0.1.2",
         "@vemjs/plugin-git": "^0.1.4",
         "@vemjs/plugin-layout-customizer": "^0.1.2",
@@ -20,7 +20,7 @@
         "@vemjs/plugin-telescope": "^0.1.2",
         "@vemjs/plugin-treesitter": "^0.1.1",
         "@vemjs/plugin-trim-whitespace": "^0.1.1",
-        "@vemjs/renderer-vecto": "^0.4.3",
+        "@vemjs/renderer-vecto": "^0.4.5",
       },
       "devDependencies": {
         "@tauri-apps/cli": "^2.9.1",
@@ -190,9 +190,9 @@
 
     "@vectojs/ui": ["@vectojs/ui@1.9.5", "", { "dependencies": { "marked": "^18.0.6", "mathjax-full": "^3.2.2" }, "peerDependencies": { "@vectojs/core": ">=1.8.0 <2.0.0" } }, "sha512-QeNuHitwnva860wq33D8YCgOsJ/Y3KEwlkavdKjBciN9mCnoMlXLfbIiFIdvyLyt2HXpdaSng0AO+ck4Yg6V8A=="],
 
-    "@vemjs/core": ["@vemjs/core@0.3.1", "", {}, "sha512-j87LQlWJn/wHaCxPB8lSOgVTqfGrHrVktFuSBoj2alqTageF+n20veGNNj6+WEZNmC+j/UsvXA9eUWrbHlSRlw=="],
+    "@vemjs/core": ["@vemjs/core@0.5.0", "", {}, "sha512-t8Nn8PWGy3AhW7x8g9IGumnDfQ6ZJANqk320XG42FuRMDHVgn61+WGxgloFwcDYrEWytjnuyRMfpHmb7nHrufQ=="],
 
-    "@vemjs/plugin-api": ["@vemjs/plugin-api@0.1.7", "", { "dependencies": { "@vemjs/core": "^0.3.1" } }, "sha512-rlo7SLFTgIFGyDa7m3oqvim3iiazZLafRntHAYwnanfLVcYsjTB6HY3geTs+rz6xdZlIQ9LlNT+7Hrdx9KYMwA=="],
+    "@vemjs/plugin-api": ["@vemjs/plugin-api@0.1.9", "", { "dependencies": { "@vemjs/core": "^0.5.0" } }, "sha512-ySTe8TjuLSE9b9Zsl3+7EwVA7t2WdRavVU1/PnVtNfLr4PuiOS+09JPr6C+VhkPzFawpkpi1/uqPj0zrcRdeBg=="],
 
     "@vemjs/plugin-autopairs": ["@vemjs/plugin-autopairs@0.1.2", "", { "peerDependencies": { "@vemjs/core": "^0.1.4", "@vemjs/plugin-api": "^0.1.4" } }, "sha512-J1nx+YcuMVSW95FFT9VVgUdFYW5JtsZGXJlWAAs1VTWzEVkF/sk6GsoVE0ViCbsY1HAl91QOiRplH3yg26+R8w=="],
 
@@ -208,7 +208,7 @@
 
     "@vemjs/plugin-trim-whitespace": ["@vemjs/plugin-trim-whitespace@0.1.1", "", { "peerDependencies": { "@vemjs/core": "^0.1.4", "@vemjs/plugin-api": "^0.1.4" } }, "sha512-DdKXoWRiExN0Kjz79MqfyzVBOhdz7ww/GS4CV8a4whmSKoVU3suKdquLdEsii9x6IIPO1AC+5kDovEftGH2GPg=="],
 
-    "@vemjs/renderer-vecto": ["@vemjs/renderer-vecto@0.4.3", "", { "dependencies": { "@vectojs/core": "^1.9.2", "@vectojs/ui": "^1.9.5", "@vemjs/core": "^0.3.1" } }, "sha512-uzqwZVa8RPpq0+GnGmX8Oxe1rLVZOvCif1MzcSBhbWCdZoTWjLqk/6IWQ/xj59ZIk4nwmRNYdyBedOIMe0lOGw=="],
+    "@vemjs/renderer-vecto": ["@vemjs/renderer-vecto@0.4.5", "", { "dependencies": { "@vectojs/core": "^1.9.2", "@vectojs/ui": "^1.9.5", "@vemjs/core": "^0.5.0" } }, "sha512-tYa3oIzHGNpnR2DRWNlEJT7dCWGlQLe7JBtO80YC6cnjU+TQX0X9YS0E39WKERU8oEH3VSMSHXDONI/nNxRdyg=="],
 
     "@xmldom/xmldom": ["@xmldom/xmldom@0.9.10", "", {}, "sha512-A9gOqLdi6cV4ibazAjcQufGj0B1y/vDqYrcuP6d/6x8P27gRS8643Dj9o1dEKtB6O7fwxb2FgBmJS2mX7gpvdw=="],
 
@@ -281,7 +281,5 @@
     "vite": ["vite@8.1.5", "", { "dependencies": { "lightningcss": "^1.32.0", "picomatch": "^4.0.5", "postcss": "^8.5.17", "rolldown": "~1.1.5", "tinyglobby": "^0.2.17" }, "optionalDependencies": { "fsevents": "~2.3.3" }, "peerDependencies": { "@types/node": "^20.19.0 || >=22.12.0", "@vitejs/devtools": "^0.3.0", "esbuild": "^0.27.0 || ^0.28.0", "jiti": ">=1.21.0", "less": "^4.0.0", "sass": "^1.70.0", "sass-embedded": "^1.70.0", "stylus": ">=0.54.8", "sugarss": "^5.0.0", "terser": "^5.16.0", "tsx": "^4.8.1", "yaml": "^2.4.2" }, "optionalPeers": ["@types/node", "@vitejs/devtools", "esbuild", "jiti", "less", "sass", "sass-embedded", "stylus", "sugarss", "terser", "tsx", "yaml"], "bin": { "vite": "bin/vite.js" } }, "sha512-7ULLwsCdYx/nRyrpiEwvqb5TFHrMVZyBt+rg/OAXT7rgj/z+DtTDyKFeLAdDkubDVDKD8jOsndmy7m55XcfUsw=="],
 
     "wicked-good-xpath": ["wicked-good-xpath@1.3.0", "", {}, "sha512-Gd9+TUn5nXdwj/hFsPVx5cuHHiF5Bwuc30jZ4+ronF1qHK5O7HD0sgmXWSEgwKquT3ClLoKPVbO6qGwVwLzvAw=="],
-
-    "@vemjs/renderer-vecto/@vectojs/core": ["@vectojs/core@1.9.2", "", {}, "sha512-FnCigvU/THdpW4TJzPLMCG6WTtdPKIWvjElb80O9K/SPGIlEaC2shIKzjs7iszFfxTSweI42tEtG2IYCaCPuCg=="],
   }
 }
