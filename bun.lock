@@ -186,11 +186,11 @@
 
     "@vectojs/core": ["@vectojs/core@1.11.1", "", {}, "sha512-m9asot4G/WCFtK1Ri5pF4qXVVBJsB7b8Z/iVV4uXSS/QzxYjLLYpyNq4Oz4RuUe0KnDqq1erK5YH5W1ZXNOzrg=="],
 
-    "@vectojs/devtools": ["@vectojs/devtools@0.4.2", "", { "peerDependencies": { "@vectojs/core": ">=1.0.0 <2.0.0", "@vectojs/ui": ">=1.0.0 <2.0.0" }, "optionalPeers": ["@vectojs/ui"] }, "sha512-Y4FHpgz6+kinSFLxeJtfrDhC6vA00BoJoJK1mxz3ZHK+twnOGJKXAa+zeSyEp1LnIsfK92i+6KidacO9FlhgoQ=="],
+    "@vectojs/devtools": ["@vectojs/devtools@0.4.3", "", { "peerDependencies": { "@vectojs/core": ">=1.0.0 <2.0.0", "@vectojs/ui": ">=1.0.0 <2.0.0" }, "optionalPeers": ["@vectojs/ui"] }, "sha512-YgFziIgN7ECUPrIerkGBXvpmFORpUqm9WI5vcjonNERyS2bEj046/Nbf4QG8tsq+ufH7mCKNlldCNxF/VbWNmw=="],
 
     "@vectojs/ui": ["@vectojs/ui@1.11.3", "", { "dependencies": { "marked": "^18.0.6", "mathjax-full": "^3.2.2" }, "peerDependencies": { "@vectojs/core": ">=1.8.0 <2.0.0" } }, "sha512-jfKZjzcDMUzo9ood9zKzgOIMH0J4DrW40NUt22imsCA+H0ki9yoJ8M1iSHX3HOgbfgEOg7ltiY6+y3r2lscqyQ=="],
 
-    "@vemjs/core": ["@vemjs/core@0.7.0", "", {}, "sha512-zyocGe8zP3jke8pHCyawkvrOqe5wHhiz9tKbLYWWM6Y0KEXcu+sswRoGnan2f2wK2iSRfFkrfEt8RRVLk7jMew=="],
+    "@vemjs/core": ["@vemjs/core@0.7.1", "", {}, "sha512-6n7o/SZRdYJvoUeaBgyBhRKF09+WocFGTakbwuWF/ywv9RHwGaUVGIfCOYTYgPa1LkRnCpAcEfFgdITsTd1FYw=="],
 
     "@vemjs/plugin-api": ["@vemjs/plugin-api@0.1.11", "", { "dependencies": { "@vemjs/core": "^0.7.0" } }, "sha512-QvVJ/pdMhXDyB2xWSYkJmEHSbi35mSdt0aXFLxGU5YIx4ESypyFFPCfU+Mu5R8xW3NvUFaJsVuDJ6eoXuBR9kw=="],
 
