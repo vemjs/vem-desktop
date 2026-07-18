@@ -38,5 +38,12 @@ dirs = "6"
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
+# Linux-only: query the *runtime* (installed, not build-time) WebKitGTK
+# version so main.rs can gate the DMABUF-disable NVIDIA workaround to only
+# the WebKitGTK versions that actually need it — already an indirect
+# dependency via wry, pinned to the same resolved version here.
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk-sys = "2.0.2"
+
 [dev-dependencies]
 tempfile = "3.27.0"

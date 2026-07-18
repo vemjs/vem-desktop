@@ -11,18 +11,41 @@
 // actually being present, per Tauri's own advice, so AMD/Intel users keep
 // the faster accelerated rendering path. Must run before Tauri/GTK/WebKit
 // initialize, so it's the first thing main() does.
+//
+// `WEBKIT_DISABLE_DMABUF_RENDERER=1` is NOT a free fix: it forces WebKit's
+// slow shared-memory readback compositing path instead of zero-copy DMA-BUF,
+// which is exactly what made the editor feel laggy (slow startup, high
+// per-keystroke latency on h/j/k/l) even after the blank-window/crash bug it
+// targets was fixed upstream in WebKitGTK. The original blank-window/Wayland
+// Error-71 bug was already fixed in WebKitGTK 2.48 (per the same class of
+// upstream fix GeoLibre's desktop app measured — ~60fps with DMA-BUF enabled
+// vs ~46fps with it force-disabled). Query the *runtime* WebKitGTK version
+// (not the build-time one baked into this binary) and only pay the slow-path
+// cost on installs where the bug still exists.
 #[cfg(target_os = "linux")]
 fn apply_webkit_wayland_workaround() {
     if !std::path::Path::new("/proc/driver/nvidia").exists() {
         return;
     }
-    // No performance cost per Tauri's docs — try this first.
+    // No performance cost per Tauri's docs — safe to always apply on NVIDIA.
     if std::env::var_os("__NV_DISABLE_EXPLICIT_SYNC").is_none() {
         std::env::set_var("__NV_DISABLE_EXPLICIT_SYNC", "1");
     }
-    // Costs the faster DMA-BUF rendering path, but is the documented fallback
-    // when explicit-sync disabling alone isn't enough.
-    if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+
+    // webkit_get_{major,minor}_version() are simple accessors returning the
+    // linked library's version — safe to call before gtk_init()/any window.
+    let (major, minor) = unsafe {
+        (
+            webkit2gtk_sys::webkit_get_major_version(),
+            webkit2gtk_sys::webkit_get_minor_version(),
+        )
+    };
+    let dmabuf_fixed_upstream = (major, minor) >= (2, 48);
+
+    // Respect an explicit user/distributor override in either direction —
+    // WebKit treats "0" as DMABUF enabled and any other value as disabled,
+    // and only applies our default when the variable is unset.
+    if !dmabuf_fixed_upstream && std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
         std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
     }
 }
