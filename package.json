@@ -17,9 +17,9 @@
     "@tauri-apps/api": "^2.9.0",
     "@tauri-apps/plugin-dialog": "^2.4.0",
     "@tauri-apps/plugin-fs": "^2.4.0",
-    "@vectojs/core": "^1.10.0",
+    "@vectojs/core": "^1.11.1",
     "@vectojs/devtools": "^0.4.2",
-    "@vectojs/ui": "^1.9.5",
+    "@vectojs/ui": "^1.11.3",
     "@vemjs/core": "^0.7.0",
     "@vemjs/plugin-api": "^0.1.11",
     "@vemjs/plugin-autopairs": "^0.1.2",
@@ -29,7 +29,7 @@
     "@vemjs/plugin-telescope": "^0.1.2",
     "@vemjs/plugin-treesitter": "^0.1.1",
     "@vemjs/plugin-trim-whitespace": "^0.1.1",
-    "@vemjs/renderer-vecto": "^0.4.8"
+    "@vemjs/renderer-vecto": "^0.4.9"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.9.1",
