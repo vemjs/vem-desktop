@@ -14,6 +14,7 @@ import { PluginPanel } from "./plugins/PluginPanel";
 import {
   createOfficialPluginRegistry,
   activatePluginById,
+  officialPlugins,
 } from "./plugins/officialPlugins";
 import { HELP_TEXT, VEMRC_TEMPLATE } from "./help";
 import { invoke } from "@tauri-apps/api/core";
@@ -300,6 +301,21 @@ async function main() {
   VemEditorState.registerGlobalExCommand("PluginLab", togglePluginLab);
   VemEditorState.registerGlobalExCommand("plugins", togglePluginLab);
 
+  VemEditorState.registerGlobalExCommand("PlugStatus", () => {
+    const registry = getPlaygroundRegistry();
+    const activeState = getActivePlaygroundState();
+    if (!activeState) return;
+    if (!registry) {
+      activeState.statusMessage = "No plugin registry for this buffer";
+      return;
+    }
+    const lines = officialPlugins.map((p) => {
+      const active = registry.has(p.plugin.name);
+      return `${active ? "✓" : "✗"} ${p.plugin.name}  — ${p.summary}`;
+    });
+    activeState.statusMessage = lines.slice(0, 7).join(" | ");
+  });
+
   const activate = (id: string) => () => {
     const registry = getPlaygroundRegistry();
     if (registry) activatePluginById(registry, id);
@@ -381,6 +397,21 @@ async function main() {
   window.addEventListener("keydown", (e) => {
     if (engineOwnsKeys(e)) return;
     if (e.isComposing || e.key === "Process") return;
+
+    // Escape closes any open side panel before passing to the editor state
+    if (!(e.ctrlKey || e.metaKey) && !e.altKey && e.key === "Escape") {
+      if (!pluginPanelUserHidden) {
+        pluginPanelUserHidden = true;
+        layoutEditor(window.innerWidth, window.innerHeight);
+        scene.markDirty();
+        return;
+      }
+      if (playgroundView.isSidebarVisible()) {
+        playgroundView.toggleSidebar();
+        scene.markDirty();
+        return;
+      }
+    }
 
     const ctrl = e.ctrlKey || e.metaKey;
     let mappedKey = e.key;
