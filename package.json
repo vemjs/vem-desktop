@@ -29,7 +29,7 @@
     "@vemjs/plugin-telescope": "^0.1.2",
     "@vemjs/plugin-treesitter": "^0.1.1",
     "@vemjs/plugin-trim-whitespace": "^0.1.1",
-    "@vemjs/renderer-vecto": "0.4.14"
+    "@vemjs/renderer-vecto": "^0.4.16"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.9.1",
