@@ -2,11 +2,13 @@ import "./style.css";
 import { Scene } from "@vectojs/core";
 import {
   WorkspaceExplorer,
+  VemEditorEntity,
   CTRL_VIM_KEYS,
   PREVENT_CTRL_KEYS,
   fileIcon,
   type WorkspaceFsProvider,
 } from "@vemjs/renderer-vecto";
+import pkg from "../package.json";
 import type { TreeNode } from "@vectojs/ui";
 import type { PluginRegistry } from "@vemjs/plugin-api";
 import { ConfigLoader, VemEditorState } from "@vemjs/core";
@@ -63,6 +65,10 @@ async function main() {
   canvas.height = window.innerHeight;
 
   const scene = new Scene(canvas, { a11ySyncInterval: 100, maxDPR: 2 });
+
+  // Shown on the intro splash ("VEM - Vim, Enhanced & Modal  v0.1.x") so
+  // users can tell which desktop build they're running.
+  VemEditorEntity.setVersion(pkg.version);
 
   const playgroundRegistries = new WeakMap<VemEditorState, PluginRegistry>();
   // The real file list once a directory is open (WorkspaceExplorer fills the
