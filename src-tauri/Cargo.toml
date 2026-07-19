@@ -1,6 +1,6 @@
 [package]
 name = "vem-desktop"
-version = "0.1.20"
+version = "0.1.21"
 description = "Vem's Tauri desktop shell"
 authors = ["vemjs"]
 license = "MIT"
