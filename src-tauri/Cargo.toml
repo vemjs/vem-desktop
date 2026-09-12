@@ -33,7 +33,7 @@ tauri = { version = "2.11.3", features = [] }
 tauri-plugin-log = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
-dirs = "6"
+dirs = "7"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
